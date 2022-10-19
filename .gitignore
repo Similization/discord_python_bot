@@ -1,0 +1,11 @@
+# created by virtualenv automatically
+.idea
+bin
+lib
+.Python
+pyvenv.cfg
+.DS_Store
+configuration.json
+music/radio
+music/albums/*
+*.mp3
