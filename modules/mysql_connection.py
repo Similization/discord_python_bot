@@ -1,5 +1,6 @@
 import json
 
+import mysql
 from mysql.connector import connect, Error
 
 try:
@@ -7,20 +8,20 @@ try:
         data = json.load(json_data_file)
     db = data["database"]
     with connect(
-            host=db["host"],
-            user=db["login"],
-            password=db["password"],
+        host=db["host"],
+        user=db["login"],
+        password=db["password"],
     ) as connection:
         create_db_query = "SELECT * FROM discord_bot.users"
         with connection.cursor() as cursor:
-            result = cursor.execute(create_db_query, multi=True)
-            if result.with_rows:
-                print("Rows produced by statement '{}':".format(
-                    result.statement))
-                print(result.fetchall())
-            else:
-                print("Number of rows affected by statement '{}': {}".format(
-                    result.statement, result.rowcount))
+            for result in cursor.execute(create_db_query, multi=True):
+                if result.with_rows:
+                    print("Rows produced by statement '{}':".format(
+                        result.statement))
+                    print(result.fetchall())
+                else:
+                    print("Number of rows affected by statement '{}': {}".format(
+                        result.statement, result.rowcount))
 except Error as e:
     print(e)
 
