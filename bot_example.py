@@ -2,14 +2,14 @@ import asyncio
 import json
 import random
 import os
+import shutil
 
 import disnake
 from disnake.ext import commands
 
 from typing import Literal
-import balaboba_integration as bi
 
-import yandex_music_integration as yami
+from modules import yandex_music_integration as yami, balaboba_integration as bi
 
 path_to_music = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'music')
 
@@ -27,12 +27,16 @@ disnake.opus.load_opus('music/libopus.dylib')
 
 @bot.slash_command(name="ping", description="Pings the bot")
 async def ping_command(inter):
-    await inter.response.send_message(f"{inter.user} pong!")
+    await inter.response.send_message(f"{inter.user.mention}, pong!")
 
 
 @bot.slash_command(name="roll", description="Rolls the dice")
 async def roll_command(inter, _from: int = 1, _to: int = 6):
-    await inter.response.send_message(f"{inter.user} rolled {random.randint(_from, _to)}!")
+    # if not isinstance(_from, int) and not isinstance(_to, int):
+    #     return await inter.response.send_message(f"bot will accept only integer arguments for this command")
+    if _from > _to:
+        _from, _to = _to, _from
+    await inter.response.send_message(f"{inter.user.mention} rolled {random.randint(_from, _to)}!")
 
 
 @bot.slash_command(name="rock-paper-scissors", description="Plays with you in rock paper scissors game")
@@ -57,9 +61,9 @@ async def play_rock_paper_scissors_command(inter, move: Literal['rock', 'paper',
                 return "Bot wins"
 
     list_of_moves = ['rock', 'paper', 'scissors']
-    if move.lower() not in list_of_moves:
-        return await inter.response.send_message(f"You entered wrong word, "
-                                                 f"bot accepts only these words: {list_of_moves}")
+    # if move not in list_of_moves:
+    #     return await inter.response.send_message(f"You entered wrong word, "
+    #                                              f"bot accepts only these words: {list_of_moves}")
     bot_move = random.choice(list_of_moves)
     await inter.response.send_message(f"{inter.user.mention} played: {move}\n"
                                       f"Bot played: {bot_move}\n{get_game_result(move, bot_move)}!")
@@ -69,48 +73,70 @@ async def play_rock_paper_scissors_command(inter, move: Literal['rock', 'paper',
 async def play_bulls_and_cows_command(inter):
     def generate_number_for_bulls_and_cows_game():
         all_numbers = [str(x) for x in range(10)]
-        result = ''
-        for i in range(4):
-            number = random.choice(all_numbers)
-            result += number
-            all_numbers.remove(number)
+        result = ''.join(random.sample(all_numbers, 4))
+        # for i in range(4):
+        #     number = random.choice(all_numbers)
+        #     result += number
+        #     all_numbers.remove(number)
         return result
 
-    def is_guess_correct(message: disnake.Message):
-        return message.author == inter.author and message.content.isdigit() and len(message.content) == 4
+    def is_guess_correct(_message: disnake.Message):
+        return _message.author == inter.author and \
+               _message.content.isdigit() and \
+               len(set(_message.content)) == 4
 
     def compare_guess_and_answer(_answer: str, _guess: str):
-        bulls_count = 0
-        cows_count = 0
+        _bulls_count = 0
+        _cows_count = 0
         for i in range(4):
             # find pos of guess[i] symbol in answer
             pos = _answer.find(_guess[i])
             # has symbol and it has same position
             if pos == i:
-                bulls_count += 1
+                _bulls_count += 1
             # has symbol, but its position is different
             elif pos != -1:
-                cows_count += 1
-        return f"bulls: {bulls_count}, cows: {cows_count}"
+                _cows_count += 1
+        return _bulls_count, _cows_count
 
-    await inter.response.send_message(f"Game starts now, please enter 4 digit str, it can starts with 0!\n")
+    await inter.response.send_message(f"Game starts now, please enter 4 different digit string,\n"
+                                      f"it can starts with 0!")
 
     answer = generate_number_for_bulls_and_cows_game()
     moves_count = 0
 
+    all_fields = ["Move", "Bulls", "Cows"]
+    game_stat = {all_fields[i]: [] for i in range(len(all_fields))}
+    message = None
+
     while True:
         try:
-            guess = await inter.bot.wait_for("message", check=is_guess_correct, timeout=40)
+            guess_message = await inter.bot.wait_for("message", check=is_guess_correct, timeout=20)
+            guess = guess_message.content
             moves_count += 1
-            if guess.content == answer:
+
+            if moves_count == 1:
+                await inter.followup.send("Previous results:")
+                message = inter.channel.last_message
+
+            bulls_count, cows_count = compare_guess_and_answer(answer, guess)
+            game_stat["Move"].append(guess)
+            game_stat["Bulls"].append(bulls_count)
+            game_stat["Cows"].append(cows_count)
+
+            embed = disnake.Embed(title=f"__**Game results:**__", color=0x03f8fc)
+            for key, value in game_stat.items():
+                value_to_str = "\n".join(map(str, value))
+                embed.add_field(name=f'**{key}**',
+                                value=f'{value_to_str}')
+
+            await inter.followup.edit_message(message.id, embed=embed)
+            await guess_message.delete()
+
+            if guess == answer:
                 break
-            result_of_compare = compare_guess_and_answer(answer, guess.content)
-            await guess.reply(f"result of previous guess is:\nYou entered: " +
-                              guess.content + "\n" + result_of_compare)
-            await guess.delete()
         except asyncio.TimeoutError:
             return await inter.followup.send(f"Sorry, you took too long. The answer was {answer}.")
-
     await inter.followup.send(f"You win, the number is: {answer}, "
                               f"it took you {moves_count} move{'' if moves_count % 10 == 1 else 's'}")
 
@@ -122,6 +148,8 @@ async def play_guess_number_command(inter, _from: int = 1, _to: int = 10):
     def is_guess_message(message: disnake.Message):
         return message.author == inter.author and message.content.isdigit()
 
+    if _from > _to:
+        _from, _to = _to, _from
     answer = random.randint(_from, _to)
 
     try:
@@ -143,12 +171,52 @@ async def generate_text_command(inter, text: str, language: Literal["en", "ru"] 
 
 
 async def clean_music_folder():
-    os.rmdir(f"{path_to_music}/songs")
-    os.rmdir(f"{path_to_music}/albums")
+    shutil.rmtree(f"{path_to_music}/songs")
+    shutil.rmtree(f"{path_to_music}/albums")
+
+
+async def is_available_to_work_with_music(inter) -> bool:
+    # проверка на то, что бота можно подключить к голосовому каналу
+    # 1 бот никуда не подключен - надо подключить
+    # 2 если бот уже подключен - надо проверить, к какому каналу и  только в этом случае сказать, что все хорошо
+    # user does not sit in any channel
+    if inter.user.voice is None:
+        await inter.response.send_message(f"you should be in a voice channel")
+        return False
+    # bot is already sits in another channel
+    if inter.user.voice.channel.guild.voice_client.is_connected():
+        await inter.response.send_message(f"bot sits in another voice channel")
+        return False
+    return True
+
+
+async def play_track(inter, track: yami.Track):
+    # если музыка еще не играет - нужно запустить
+    vc = await inter.user.voice.channel.connect()
+    await inter.response.send_message(f"now is playing song: {track.title}")
+    vc.play(disnake.FFmpegPCMAudio(f'{track.short_path}'), after=lambda e: print('done', e))
+    while vc.is_playing():
+        await asyncio.sleep(1)
+    vc.stop()
+
+
+async def play_songs(inter):
+    # есть список треков - yami.YAM().track_list
+    # нужно пройтись по нему и запустить каждый из треков в порядке очереди,
+    # при условии, что треки будут обновляться и новые тоже должны быть запущены
+    for volume in yami.YAM().track_list:
+        if isinstance(volume, yami.Track):
+            await play_track(inter, volume)
+        else:
+            await inter.response.send_message(f"now is playing album: {volume.title}")
+            for track in volume.tracks:
+                await play_track(inter, track)
 
 
 @bot.slash_command(name="yam-play-song", description="Search for song in yandex music")
 async def yam_play_song_command(inter, song_name: str):
+    n = bot
+    m = inter
     if inter.user.voice is None:
         return await inter.response.send_message(f"you should be in a voice channel")
     if inter.user.voice.channel.guild.voice_client is None:
@@ -174,8 +242,9 @@ async def yam_play_album_command(inter, album_name: str):
         return await inter.response.send_message(f"you should be in a voice channel")
     if inter.user.voice.channel.guild.voice_client is None:
         await inter.response.defer()
-        yam_class = yami.YAM()
-        album_title = await yam_class.download_album_by_name(album_name=album_name)
+        # проблема - ждет загрузки всех треков из альбома,
+        # нужно, чтобы дожидался загрузки хотя бы одного и сразу же его запускал
+        album_title = await yami.YAM().download_album_by_name(album_name=album_name)
 
         vc = await inter.user.voice.channel.connect()
         await inter.followup.send(f"bot is playing: {album_title}")
@@ -194,7 +263,7 @@ async def yam_play_album_command(inter, album_name: str):
         return await inter.response.send_message(f"bot sits in another voice channel")
 
 
-@bot.slash_command(name="stop_yam", description="Stop playing music")
+@bot.slash_command(name="yam-stop", description="Stop playing music")
 async def stop_command(inter):
     if inter.user.voice is None:
         return await inter.response.send_message(f"bot is already left all channels")

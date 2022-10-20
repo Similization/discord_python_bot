@@ -12,12 +12,41 @@ import yandex_music.exceptions
 from yandex_music import Client
 
 
+def get_artists_names(artists: list) -> str:
+    artists_names = []
+    for artist in artists:
+        artists_names.append(artist.name)
+    return ' ,'.join(artists_names)
+
+
+class Track:
+    def __init__(self, yam_track: yandex_music.Track = None, catalog: str = "music/songs"):
+        self.track = yam_track
+        self.artists = get_artists_names(self.track.artists)
+        self.title = f"{self.track.title} - {self.artists}"
+        self.catalog = catalog
+        self.extension = "mp3"
+        self.short_path = f"{self.catalog}/{self.track.title} - {self.artists}.{self.extension}"
+
+
+class Album:
+    def __init__(self, yam_album: yandex_music.Album = None, tracks: list = None):
+        self.album = yam_album
+        self.artists = get_artists_names(self.album.artists)
+        self.title = f"{self.album.title} - {self.artists}"
+        self.catalog = "albums"
+        self.short_path = f"music/{self.catalog}/{self.album.title} - {self.artists}"
+        self.tracks = tracks
+
+
 class YAM:
+    track_list: list = []
+
     def __init__(self):
         """Constructor"""
         self.client: Client
 
-        with open("configuration.json", "r") as json_data_file:
+        with open("../configuration.json", "r") as json_data_file:
             data = json.load(json_data_file)
         yandex_token = data["yandex"]["token"]
 
@@ -30,7 +59,7 @@ class YAM:
             yandex_token = self.__private_get_token()
 
             data["yandex"]["token"] = yandex_token
-            with open("configuration.json", "w") as json_data_file:
+            with open("../configuration.json", "w") as json_data_file:
                 json.dump(data, json_data_file)
             self.client = Client(yandex_token).init()
 
@@ -75,30 +104,32 @@ class YAM:
         return token
 
     @staticmethod
-    def __private_get_album_artists_names(artists: list) -> str:
+    def __private_get_artists_names(artists) -> str:
         artists_names = []
         for artist in artists:
             artists_names.append(artist.name)
         return ' ,'.join(artists_names)
 
     async def download_song_by_name(self, song_name: str) -> str:
-        track = self.client.search(song_name, type_='track').tracks.results[0]
-        artists_names = self.__private_get_album_artists_names(track.artists)
-        track.download(f"music/songs/{track.title} - {artists_names}.mp3")
-        return f"{track.title} - {artists_names}"
+        track = Track(yam_track=self.client.search(song_name, type_='track').tracks.results[0])
+        # upload track
+        track.track.download(track.short_path)
+        # add track to track list
+        self.track_list.append(track)
+        return track.title
 
     async def download_album_by_name(self, album_name: str) -> str:
-        album = self.client.search(album_name).albums.results[0].with_tracks()
-        artists_names = self.__private_get_album_artists_names(album.artists)
+        album = Album(self.client.search(album_name).albums.results[0].with_tracks())
 
-        path_to_album = f"{os.path.dirname(__file__)}/music/albums/{album.title} - {artists_names}"
-        if not os.path.exists(path_to_album):
-            os.mkdir(path_to_album)
+        full_path_to_album = f"{os.path.dirname(__file__)}/{album.short_path}"
+        if not os.path.exists(full_path_to_album):
+            os.mkdir(full_path_to_album)
 
         tracks_in_album = []
-        for volume in album.volumes:
+        for volume in album.album.volumes:
             for track in volume:
-                track_artists_names = self.__private_get_album_artists_names(track.artists)
-                track.download(f"{path_to_album}/{track.title} - {track_artists_names}.mp3")
-                tracks_in_album.append(track)
-        return f"{album.title} - {artists_names}"
+                track_cls = Track(track, catalog=album.short_path)
+                track.download(track_cls.short_path)
+                tracks_in_album.append(track_cls)
+
+        return album.title
