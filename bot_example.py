@@ -190,7 +190,7 @@ async def is_available_to_work_with_music(inter) -> bool:
     return True
 
 
-async def play_track(inter, track: yami.Track):
+async def play_track(inter, track: yami.TrackInfo):
     # если музыка еще не играет - нужно запустить
     vc = await inter.user.voice.channel.connect()
     await inter.response.send_message(f"now is playing song: {track.title}")
@@ -205,7 +205,7 @@ async def play_songs(inter):
     # нужно пройтись по нему и запустить каждый из треков в порядке очереди,
     # при условии, что треки будут обновляться и новые тоже должны быть запущены
     for volume in yami.YAM().track_list:
-        if isinstance(volume, yami.Track):
+        if isinstance(volume, yami.TrackInfo):
             await play_track(inter, volume)
         else:
             await inter.response.send_message(f"now is playing album: {volume.title}")
@@ -215,8 +215,6 @@ async def play_songs(inter):
 
 @bot.slash_command(name="yam-play-song", description="Search for song in yandex music")
 async def yam_play_song_command(inter, song_name: str):
-    n = bot
-    m = inter
     if inter.user.voice is None:
         return await inter.response.send_message(f"you should be in a voice channel")
     if inter.user.voice.channel.guild.voice_client is None:
@@ -263,10 +261,22 @@ async def yam_play_album_command(inter, album_name: str):
         return await inter.response.send_message(f"bot sits in another voice channel")
 
 
+@bot.slash_command(name="yam-play", description="Search in yandex music")
+async def yam_play_command(inter, _type: Literal["track", "album", "podcast episode", "podcast"],
+                           name: str):
+    # check if we can connect to channel
+    # need to upload track/album/podcast...
+    await yami.YAM().download(name=name, _type=_type)
+    # add to queue
+
+
 @bot.slash_command(name="yam-stop", description="Stop playing music")
 async def stop_command(inter):
+    # check if bot is on channel
     if inter.user.voice is None:
         return await inter.response.send_message(f"bot is already left all channels")
+    # stop queue
+    # clean all folders
     await clean_music_folder()
     await inter.user.voice.channel.guild.voice_client.disconnect()
     await inter.response.send_message(f"bot disconnected from a voice channel")

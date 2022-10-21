@@ -1,5 +1,3 @@
-import asyncio
-
 from aiobalaboba import Balaboba
 from typing import Literal
 
