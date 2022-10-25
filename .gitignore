@@ -5,7 +5,11 @@ lib
 .Python
 pyvenv.cfg
 .DS_Store
+__pycache__/
+*.py[cod]
+
 configuration.json
+
 music/radio
 music/albums/*
 *.mp3
