@@ -43,7 +43,7 @@ class AlbumInfo:
         self.title = f"{self.album.title} - {self.artists}"
         self.catalog = catalog
         self.short_path = f"{self.catalog}/{self.album.title} - {self.artists}"
-        self.tracks = tracks
+        self.tracks = list() if tracks is None else tracks
 
 
 class YAM:
@@ -124,9 +124,11 @@ class YAM:
         return " ,".join(artists_names)
 
     async def download_track(self, track_info: TrackInfo):
-        full_path_to_track = f"{os.path.dirname(__file__)}/{track_info.short_path}"
+        full_path_to_track = (
+            f"{os.path.split(os.path.dirname(__file__))[0]}/{track_info.catalog}"
+        )
         if not os.path.exists(full_path_to_track):
-            os.mkdir(full_path_to_track)
+            os.makedirs(full_path_to_track)
 
         # upload track
         track_info.track.download(track_info.short_path)
@@ -135,9 +137,11 @@ class YAM:
         return track_info.title
 
     async def download_album(self, album_info: AlbumInfo):
-        full_path_to_album = f"{os.path.dirname(__file__)}/{album_info.short_path}"
+        full_path_to_album = (
+            f"{os.path.split(os.path.dirname(__file__))[0]}/{album_info.short_path}"
+        )
         if not os.path.exists(full_path_to_album):
-            os.mkdir(full_path_to_album)
+            os.makedirs(full_path_to_album)
 
         for volume in album_info.album.volumes:
             for track in volume:
@@ -186,7 +190,7 @@ class YAM:
                     catalog="music/podcasts",
                 )
                 await self.download_album(podcast)
-        return False
+        return True
 
     # async def download_song_by_name(self, song_name: str) -> str:
     #     track_info = TrackInfo(value=self.client.search(song_name, type_='track').tracks.results[0])

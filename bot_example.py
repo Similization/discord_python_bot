@@ -186,12 +186,11 @@ async def generate_text_command(
 async def clean_music_folder():
     shutil.rmtree(f"{path_to_music}/songs")
     shutil.rmtree(f"{path_to_music}/albums")
+    shutil.rmtree(f"{path_to_music}/podcasts")
+    shutil.rmtree(f"{path_to_music}/podcast_episodes")
 
 
 async def is_available_to_connect(inter: disnake.ApplicationCommandInteraction) -> bool:
-    # проверка на то, что бота можно подключить к голосовому каналу
-    # 1 бот никуда не подключен - надо подключить
-    # 2 если бот уже подключен - надо проверить, к какому каналу и  только в этом случае сказать, что все хорошо
     # user does not sit in any channel
     if inter.user.voice is None:
         await inter.response.send_message(f"you should be in a voice channel")
@@ -214,7 +213,7 @@ async def play_track(
     await inter.followup.send(f"now is playing song: {track.title}")
     voice_client.play(
         disnake.FFmpegPCMAudio(f"{track.short_path}"),
-        after=lambda e: print("done", e),
+        after=print("done"),
     )
     while voice_client.is_playing():
         await asyncio.sleep(1)
@@ -231,6 +230,9 @@ async def play(
             await inter.followup.send(f"now is playing album: {volume.title}")
             for track in volume.tracks:
                 await play_track(inter=inter, voice_client=voice_client, track=track)
+
+    await voice_client.disconnect()
+    await clean_music_folder()
 
 
 # @bot.slash_command(name="yam-play-song", description="Search for song in yandex music")
@@ -292,9 +294,10 @@ async def yam_play_command(
         await inter.response.send_message(f"bot connected to the channel")
     else:
         vc = bot.voice_clients[0]
-    # need to upload track/album/podcast...
-    if await yami.YAM().download(name=name, _type=_type):
-        await inter.response.send_message(f"bot couldn't find anything")
+    # upload track/album/podcast... if can find at least one -> return True,
+    # otherwise -> return False
+    if not await yami.YAM().download(name=name, _type=_type):
+        return await inter.followup.send(f"bot couldn't find anything")
 
     if not vc.is_playing():
         await play(inter=inter, voice_client=vc)
