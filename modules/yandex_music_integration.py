@@ -16,7 +16,7 @@ def get_artists_names(artists: list) -> str:
     artists_names = []
     for artist in artists:
         artists_names.append(artist.name)
-    return " ,".join(artists_names)
+    return ", ".join(artists_names)
 
 
 class TrackInfo:
@@ -121,7 +121,7 @@ class YAM:
         artists_names = []
         for artist in artists:
             artists_names.append(artist.name)
-        return " ,".join(artists_names)
+        return ", ".join(artists_names)
 
     async def download_track(self, track_info: TrackInfo):
         full_path_to_track = (

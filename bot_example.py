@@ -19,7 +19,7 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix=commands.when_mentioned_or("!"), intents=intents)
 
-disnake.opus.load_opus("music/libopus.dylib")
+disnake.opus.load_opus("util/libopus.dylib")
 
 
 @bot.slash_command(name="ping", description="Pings the bot")
@@ -92,7 +92,7 @@ async def play_bulls_and_cows_command(inter: disnake.ApplicationCommandInteracti
             game_stat["Bulls"].append(bulls_count)
             game_stat["Cows"].append(cows_count)
 
-            embed = disnake.Embed(title=f"__**Game results:**__", color=0x03F8FC)
+            embed = disnake.Embed(title=f"__**Game results:**__", color=0xFFAE00)
             for key, value in game_stat.items():
                 value_to_str = "\n".join(map(str, value))
                 embed.add_field(name=f"**{key}**", value=f"{value_to_str}")
@@ -124,22 +124,6 @@ async def play_tic_tac_toe_command(
     bot_mark = [arg for arg in get_args(Literal["cross", "zero"]) if arg != mark][0]
     game_bot = TicTacToeBot(difficulty=difficulty, mark=bot_mark, field=field)
     game = TicTacToeGame(player_1=player, player_2=game_bot, field=field)
-
-
-# @bot.slash_command(description='test')
-# async def test(self, slash_inter: disnake.ApplicationCommandInteraction, member: disnake.Member):
-#     view = CustomView(member)
-#     button1 = BlurpleButton("TEST")
-#     view.add_item(button1)
-#
-#     async def button_callback(button_inter: disnake.MessageInteraction):
-#         button1.disabled = True
-#         await button_inter.send(embed=embedname2)
-#         await slash_inter.edit_original_message(view=view)
-#
-#     button1.callback = button_callback
-#
-#     await slash_inter.send(embed=embed1, view=view)
 
 
 @bot.slash_command(
@@ -184,13 +168,10 @@ async def generate_text_command(
 
 
 async def clean_music_folder():
-    shutil.rmtree(f"{path_to_music}/songs")
-    shutil.rmtree(f"{path_to_music}/albums")
-    shutil.rmtree(f"{path_to_music}/podcasts")
-    shutil.rmtree(f"{path_to_music}/podcast_episodes")
+    shutil.rmtree(f"{path_to_music}")
 
 
-async def is_available_to_connect(inter: disnake.ApplicationCommandInteraction) -> bool:
+async def is_available_to_use(inter: disnake.ApplicationCommandInteraction) -> bool:
     # user does not sit in any channel
     if inter.user.voice is None:
         await inter.response.send_message(f"you should be in a voice channel")
@@ -202,7 +183,7 @@ async def is_available_to_connect(inter: disnake.ApplicationCommandInteraction) 
     ):
         await inter.response.send_message(f"bot sits in another voice channel")
         return False
-    return inter.guild.voice_client is None
+    return True
 
 
 async def play_track(
@@ -215,9 +196,10 @@ async def play_track(
         disnake.FFmpegPCMAudio(f"{track.short_path}"),
         after=print("done"),
     )
-    while voice_client.is_playing():
+    while voice_client.is_playing() or voice_client.is_paused():
         await asyncio.sleep(1)
     voice_client.stop()
+    yami.YAM.track_list = yami.YAM.track_list[1:]
 
 
 async def play(
@@ -227,7 +209,20 @@ async def play(
         if isinstance(volume, yami.TrackInfo):
             await play_track(inter=inter, voice_client=voice_client, track=volume)
         else:
-            await inter.followup.send(f"now is playing album: {volume.title}")
+            embed = disnake.Embed(
+                title=f"**Now is playing\n{volume.title}**", color=0xFFAE00
+            )
+            album_stat = {
+                "Position": [i for i in range(1, len(volume.tracks) + 1)],
+                "Title": [track.title for track in volume.tracks],
+            }
+
+            for key, value in album_stat.items():
+                value_to_str = "\n".join(map(str, value))
+                embed.add_field(name=f"**{key}**", value=f"{value_to_str}")
+
+            await inter.followup.send(embed=embed)
+
             for track in volume.tracks:
                 await play_track(inter=inter, voice_client=voice_client, track=track)
 
@@ -235,52 +230,20 @@ async def play(
     await clean_music_folder()
 
 
-# @bot.slash_command(name="yam-play-song", description="Search for song in yandex music")
-# async def yam_play_song_command(inter, song_name: str):
-#     if inter.user.voice is None:
-#         return await inter.response.send_message(f"you should be in a voice channel")
-#     if inter.user.voice.channel.guild.voice_client is None:
-#         yam_class = yami.YAM()
-#         song_title = await yam_class.download_song_by_name(song_name=song_name)
-#
-#         vc = await inter.user.voice.channel.connect()
-#         await inter.response.send_message(f"bot is playing: {song_title}")
-#
-#         vc.play(disnake.FFmpegPCMAudio(f'music/songs/{song_title}.mp3'), after=lambda e: print('done', e))
-#         while vc.is_playing():
-#             await asyncio.sleep(1)
-#         vc.stop()
-#         await clean_music_folder()
-#         return await vc.disconnect()
-#     if inter.user.voice.channel.guild.voice_client.is_connected():
-#         return await inter.response.send_message(f"bot sits in another voice channel")
-#
-#
-# @bot.slash_command(name="yam-play-album", description="Search for album in yandex music")
-# async def yam_play_album_command(inter, album_name: str):
-#     if inter.user.voice is None:
-#         return await inter.response.send_message(f"you should be in a voice channel")
-#     if inter.user.voice.channel.guild.voice_client is None:
-#         await inter.response.defer()
-#         # проблема - ждет загрузки всех треков из альбома,
-#         # нужно, чтобы дожидался загрузки хотя бы одного и сразу же его запускал
-#         album_title = await yami.YAM().download_album_by_name(album_name=album_name)
-#
-#         vc = await inter.user.voice.channel.connect()
-#         await inter.followup.send(f"bot is playing: {album_title}")
-#
-#         path_to_album_songs = os.path.join(os.path.abspath(os.path.dirname(__file__)),
-#                                            f'music/albums/{album_title}')
-#         for track_name in os.listdir(path_to_album_songs):
-#             vc.play(disnake.FFmpegPCMAudio(f'{path_to_album_songs}/{track_name}'),
-#                     after=lambda e: print('done', e))
-#             while vc.is_playing():
-#                 await asyncio.sleep(1)
-#             vc.stop()
-#         await clean_music_folder()
-#         return await vc.disconnect()
-#     if inter.user.voice.channel.guild.voice_client.is_connected():
-#         return await inter.response.send_message(f"bot sits in another voice channel")
+async def pause(
+    inter: disnake.ApplicationCommandInteraction,
+    voice_client: disnake.VoiceClient | disnake.VoiceProtocol,
+):
+    await inter.response.send_message(f"music was paused by: {inter.user.mention}")
+    voice_client.pause()
+
+
+async def resume(
+    inter: disnake.ApplicationCommandInteraction,
+    voice_client: disnake.VoiceClient | disnake.VoiceProtocol,
+):
+    await inter.response.send_message(f"music was resumed by: {inter.user.mention}")
+    voice_client.resume()
 
 
 @bot.slash_command(name="yam-play", description="Search in yandex music")
@@ -289,12 +252,13 @@ async def yam_play_command(
     _type: Literal["track", "album", "podcast episode", "podcast"],
     name: str,
 ):
-    if await is_available_to_connect(inter):
+    if await is_available_to_use(inter) and inter.guild.voice_client is None:
         vc = await inter.user.voice.channel.connect(timeout=80)
         await inter.response.send_message(f"bot connected to the channel")
     else:
         vc = bot.voice_clients[0]
-    # upload track/album/podcast... if can find at least one -> return True,
+    # upload track/album/podcast...
+    # if can find at least one -> return True,
     # otherwise -> return False
     if not await yami.YAM().download(name=name, _type=_type):
         return await inter.followup.send(f"bot couldn't find anything")
@@ -307,15 +271,45 @@ async def yam_play_command(
         )
 
 
-@bot.slash_command(name="yam-stop", description="Stop playing music")
+@bot.slash_command(name="pause", description="Pause music")
+async def yam_pause_command(inter: disnake.ApplicationCommandInteraction):
+    if await is_available_to_use(inter) and inter.guild.voice_client is not None:
+        await pause(inter=inter, voice_client=inter.guild.voice_client)
+    else:
+        await inter.response.send_message(f"bot doesn't sit in any voice channel")
+
+
+@bot.slash_command(name="resume", description="Resume music")
+async def yam_resume_command(inter: disnake.ApplicationCommandInteraction):
+    if await is_available_to_use(inter) and inter.guild.voice_client is not None:
+        await resume(inter=inter, voice_client=inter.guild.voice_client)
+    else:
+        await inter.response.send_message(f"bot doesn't sit in any voice channel")
+
+
+@bot.slash_command(name="skip", description="Skip current song")
+async def yam_skip_command(inter: disnake.ApplicationCommandInteraction):
+    if await is_available_to_use(inter) and inter.guild.voice_client is not None:
+        inter.guild.voice_client.stop()
+        await inter.response.send_message(f"music was skipped by: {inter.user.mention}")
+    else:
+        await inter.response.send_message(f"bot doesn't sit in any voice channel")
+
+
+@bot.slash_command(name="stop", description="Stop playing music")
 async def stop_command(inter: disnake.ApplicationCommandInteraction):
-    # check if bot is on channel
-    if inter.user.voice is None:
-        return await inter.response.send_message(f"bot is already left all channels")
+    # check if user can use this command
+    if not await is_available_to_use(inter=inter):
+        return
+    # check if bot already left all voice channels
+    if inter.guild.voice_client is None:
+        return await inter.response.send_message(
+            f"bot is already left all voice channels"
+        )
     # stop queue
     # clean all folders
     await clean_music_folder()
-    await inter.user.voice.channel.guild.voice_client.disconnect(force=False)
+    await inter.guild.voice_client.disconnect(force=False)
     await inter.response.send_message(f"bot disconnected from a voice channel")
 
 
