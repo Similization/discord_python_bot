@@ -33,10 +33,10 @@ class TrackInfo:
 
 class AlbumInfo:
     def __init__(
-            self,
-            value: yandex_music.Album = None,
-            tracks: list[TrackInfo] = None,
-            catalog: str = "music/albums",
+        self,
+        value: yandex_music.Album = None,
+        tracks: list[TrackInfo] = None,
+        catalog: str = "music/albums",
     ):
         self.album = value
         self.artists = get_artists_names(self.album.artists)
@@ -151,9 +151,7 @@ class YAM:
         self.track_list.append(album_info)
 
     async def find_by_type(
-            self,
-            name: str,
-            _type: Literal["track", "album", "podcast episode", "podcast"]
+        self, name: str, _type: Literal["track", "album", "podcast episode", "podcast"]
     ) -> Optional[TrackInfo | AlbumInfo]:
         match _type:
             case "track":
