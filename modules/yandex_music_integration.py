@@ -1,7 +1,7 @@
 import json
 import os
 from time import sleep
-from typing import Union, Literal
+from typing import Union, Literal, Optional
 
 from selenium import webdriver
 from selenium.webdriver import DesiredCapabilities
@@ -33,10 +33,10 @@ class TrackInfo:
 
 class AlbumInfo:
     def __init__(
-        self,
-        value: yandex_music.Album = None,
-        tracks: list[TrackInfo] = None,
-        catalog: str = "music/albums",
+            self,
+            value: yandex_music.Album = None,
+            tracks: list[TrackInfo] = None,
+            catalog: str = "music/albums",
     ):
         self.album = value
         self.artists = get_artists_names(self.album.artists)
@@ -134,7 +134,6 @@ class YAM:
         track_info.track.download(track_info.short_path)
         # add track to track list
         self.track_list.append(track_info)
-        return track_info.title
 
     async def download_album(self, album_info: AlbumInfo):
         full_path_to_album = (
@@ -150,96 +149,42 @@ class YAM:
                 album_info.tracks.append(track_cls)
 
         self.track_list.append(album_info)
-        return album_info.title
 
-    async def download(
-        self, name: str, _type: Literal["track", "album", "podcast episode", "podcast"]
-    ) -> bool:
+    async def find_by_type(
+            self,
+            name: str,
+            _type: Literal["track", "album", "podcast episode", "podcast"]
+    ) -> Optional[TrackInfo | AlbumInfo]:
         match _type:
             case "track":
                 founded_tracks = self.client.search(name, type_="track").tracks
-                if founded_tracks is None:
-                    return False
-                track = TrackInfo(value=founded_tracks.results[0])
-                await self.download_track(track)
+                if founded_tracks is not None:
+                    return TrackInfo(value=founded_tracks.results[0])
             case "podcast episode":
                 founded_podcast_episodes = self.client.search(
                     name, type_="podcast_episode"
                 ).podcast_episodes
-                if founded_podcast_episodes is None:
-                    return False
-                podcast_episode = TrackInfo(
-                    value=founded_podcast_episodes.results[0],
-                    catalog="music/podcast_episodes",
-                )
-                await self.download_track(podcast_episode)
+                if founded_podcast_episodes is not None:
+                    return TrackInfo(
+                        value=founded_podcast_episodes.results[0],
+                        catalog="music/podcast_episodes",
+                    )
             case "album":
                 founded_albums = self.client.search(name).albums
-                if founded_albums is None:
-                    return False
-                album = AlbumInfo(
-                    value=founded_albums.results[0].with_tracks(),
-                )
-                await self.download_album(album)
+                if founded_albums is not None:
+                    return AlbumInfo(
+                        value=founded_albums.results[0].with_tracks(),
+                    )
             case "podcast":
                 founded_podcasts = self.client.search(name, type_="podcast").podcasts
-                if founded_podcasts is None:
-                    return False
-                podcast = AlbumInfo(
-                    value=founded_podcasts.results[0],
-                    catalog="music/podcasts",
-                )
-                await self.download_album(podcast)
-        return True
+                if founded_podcasts is not None:
+                    return AlbumInfo(
+                        value=founded_podcasts.results[0],
+                        catalog="music/podcasts",
+                    )
 
-    # async def download_song_by_name(self, song_name: str) -> str:
-    #     track_info = TrackInfo(value=self.client.search(song_name, type_='track').tracks.results[0])
-    #     # upload track
-    #     track_info.track.download(track_info.short_path)
-    #     # add track to track list
-    #     self.track_list.append(track_info)
-    #     return track_info.title
-    #
-    # async def download_album_by_name(self, album_name: str) -> str:
-    #     album_info = AlbumInfo(value=self.client.search(album_name).albums.results[0].with_tracks())
-    #
-    #     full_path_to_album = f"{os.path.dirname(__file__)}/{album_info.short_path}"
-    #     if not os.path.exists(full_path_to_album):
-    #         os.mkdir(full_path_to_album)
-    #
-    #     tracks_in_album = []
-    #     for volume in album_info.album.volumes:
-    #         for track in volume:
-    #             track_cls = TrackInfo(track, catalog=album_info.short_path)
-    #             track.download(track_cls.short_path)
-    #             tracks_in_album.append(track_cls)
-    #
-    #     return album_info.title
-    #
-    # async def download_podcast_by_name(self, podcast_name: str) -> str:
-    #     podcast = AlbumInfo(value=self.client.search(podcast_name, type_='podcast')
-    #                         .podcasts
-    #                         .results[0], catalog="music/podcasts")
-    #
-    #     full_path_to_podcast = f"{os.path.dirname(__file__)}/{podcast.short_path}"
-    #     if not os.path.exists(full_path_to_podcast):
-    #         os.mkdir(full_path_to_podcast)
-    #
-    #     tracks_in_album = []
-    #     for volume in podcast.album.volumes:
-    #         for track in volume:
-    #             track_cls = TrackInfo(track, catalog=podcast.short_path)
-    #             track.download(track_cls.short_path)
-    #             tracks_in_album.append(track_cls)
-    #
-    #     return podcast.title
-    #
-    # async def download_podcast_by_episode(self, podcast_episode: str) -> str:
-    #     podcast = TrackInfo(value=self.client.search(podcast_episode, type_='podcast_episode')
-    #                         .podcast_episodes
-    #                         .results[0], catalog="music/podcast_episodes")
-    #     # upload podcast
-    #     podcast.track.download(podcast.short_path)
-    #     # add track to track list
-    #     self.track_list.append(podcast)
-    #     return podcast.title
+    async def download(self, volume: TrackInfo | AlbumInfo):
+        if isinstance(volume, TrackInfo):
+            await self.download_track(volume)
+        elif isinstance(volume, AlbumInfo):
+            await self.download_album(volume)

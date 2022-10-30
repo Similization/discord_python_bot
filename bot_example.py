@@ -169,19 +169,20 @@ async def generate_text_command(
 
 async def clean_music_folder():
     shutil.rmtree(f"{path_to_music}")
+    os.mkdir(f"{path_to_music}")
 
 
 async def is_available_to_use(inter: disnake.ApplicationCommandInteraction) -> bool:
     # user does not sit in any channel
     if inter.user.voice is None:
-        await inter.response.send_message(f"you should be in a voice channel")
+        await inter.channel.send(f"you should be in a voice channel")
         return False
     # bot is already sits in another channel
     if (
         inter.guild.voice_client is not None
         and inter.me.voice.channel != inter.user.voice.channel
     ):
-        await inter.response.send_message(f"bot sits in another voice channel")
+        await inter.channel.send(f"bot sits in another voice channel")
         return False
     return True
 
@@ -191,7 +192,7 @@ async def play_track(
     voice_client: disnake.VoiceClient,
     track: yami.TrackInfo,
 ):
-    await inter.followup.send(f"now is playing song: {track.title}")
+    await inter.channel.send(f"now is playing song: {track.title}")
     voice_client.play(
         disnake.FFmpegPCMAudio(f"{track.short_path}"),
         after=print("done"),
@@ -205,6 +206,7 @@ async def play_track(
 async def play(
     inter: disnake.ApplicationCommandInteraction, voice_client: disnake.VoiceClient
 ):
+    print(yami.YAM().track_list)
     for volume in yami.YAM().track_list:
         if isinstance(volume, yami.TrackInfo):
             await play_track(inter=inter, voice_client=voice_client, track=volume)
@@ -221,7 +223,7 @@ async def play(
                 value_to_str = "\n".join(map(str, value))
                 embed.add_field(name=f"**{key}**", value=f"{value_to_str}")
 
-            await inter.followup.send(embed=embed)
+            await inter.channel.send(embed=embed)
 
             for track in volume.tracks:
                 await play_track(inter=inter, voice_client=voice_client, track=track)
@@ -234,7 +236,7 @@ async def pause(
     inter: disnake.ApplicationCommandInteraction,
     voice_client: disnake.VoiceClient | disnake.VoiceProtocol,
 ):
-    await inter.response.send_message(f"music was paused by: {inter.user.mention}")
+    await inter.channel.send(f"music was paused by: {inter.user.mention}")
     voice_client.pause()
 
 
@@ -242,7 +244,7 @@ async def resume(
     inter: disnake.ApplicationCommandInteraction,
     voice_client: disnake.VoiceClient | disnake.VoiceProtocol,
 ):
-    await inter.response.send_message(f"music was resumed by: {inter.user.mention}")
+    await inter.channel.send(f"music was resumed by: {inter.user.mention}")
     voice_client.resume()
 
 
@@ -254,21 +256,19 @@ async def yam_play_command(
 ):
     if await is_available_to_use(inter) and inter.guild.voice_client is None:
         vc = await inter.user.voice.channel.connect(timeout=80)
-        await inter.response.send_message(f"bot connected to the channel")
+        await inter.channel.send(f"bot connected to the channel")
     else:
         vc = bot.voice_clients[0]
-    # upload track/album/podcast...
-    # if can find at least one -> return True,
-    # otherwise -> return False
-    if not await yami.YAM().download(name=name, _type=_type):
-        return await inter.followup.send(f"bot couldn't find anything")
+
+    volume = await yami.YAM().find_by_type(name=name, _type=_type)
+    if volume is None:
+        return await inter.response.send_message(f"bot couldn't find anything")
+
+    await inter.response.send_message(f"{volume.title} added to queue.")
+    await yami.YAM().download(volume=volume)
 
     if not vc.is_playing():
         await play(inter=inter, voice_client=vc)
-    else:
-        await inter.response.send_message(
-            f"{yami.YAM.track_list[-1].title} added to queue."
-        )
 
 
 @bot.slash_command(name="pause", description="Pause music")
