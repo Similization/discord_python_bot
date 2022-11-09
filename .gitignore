@@ -9,14 +9,17 @@ __pycache__/
 *.py[cod]
 
 # private data
-configuration.json
+util/configuration.json
 
 # unnecessary files
+etc
+share
 deprecated_code
-music/
+/music
 *.mp3
 
 # future file
 modules/button
-modules/MusicQueue.py
 modules/games/TicTacToe.py
+modules/music/vk_music_integration.py
+modules/music/youtube_music_integration.py
