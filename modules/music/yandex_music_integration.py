@@ -179,6 +179,8 @@ class YAM:
                     )
 
     async def download(self, volume: TrackInfo | AlbumInfo):
+        if volume in self.track_list:
+            return
         if isinstance(volume, TrackInfo):
             await self.download_track(volume)
         elif isinstance(volume, AlbumInfo):

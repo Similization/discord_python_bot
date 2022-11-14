@@ -21,6 +21,7 @@ with open("util/configuration.json") as json_data_file:
     data = json.load(json_data_file)
 bot_data = data["bot"]
 bot = StarBot(config=bot_data)
+bot.music_queue = MusicQueue(inter=None, voice_client=None)
 
 
 @bot.slash_command(name="ping", description="Pings the bot")
@@ -174,24 +175,42 @@ async def clean_music_folder():
 
 
 async def user_in_voice_channel(inter: disnake.ApplicationCommandInteraction) -> bool:
-    if inter.user.voice is None:
-        await inter.response.send_message(f"you should be in a voice channel")
-        return False
-    return True
+    return inter.user.voice is not None
 
 
 async def bot_is_in_same_channel(inter: disnake.ApplicationCommandInteraction) -> bool:
-    if (
-        len(bot.voice_clients) != 0
-        and bot.voice_clients[0].channel != inter.user.voice.channel
-    ):
+    return bot.voice_clients[0].channel == inter.user.voice.channel
+
+
+async def bot_is_in_channel() -> bool:
+    return len(bot.voice_clients) != 0
+
+
+async def bot_is_available_to_connect(
+    inter: disnake.ApplicationCommandInteraction,
+) -> bool:
+    if not await user_in_voice_channel(inter):
+        await inter.response.send_message(f"you should be in a voice channel")
+        return False
+    if await bot_is_in_channel() and not await bot_is_in_same_channel(inter):
         await inter.response.send_message(f"bot sits in another voice channel")
         return False
     return True
 
 
-async def bot_is_available(inter: disnake.ApplicationCommandInteraction) -> bool:
-    return await user_in_voice_channel(inter) and await bot_is_in_same_channel(inter)
+async def music_commands_are_available(
+    inter: disnake.ApplicationCommandInteraction,
+) -> bool:
+    if not await bot_is_in_channel():
+        await inter.response.send_message(f"bot doesn't sit in any channel")
+        return False
+    if not await user_in_voice_channel(inter):
+        await inter.response.send_message(f"you should be in a voice channel")
+        return False
+    if not await bot_is_in_same_channel(inter):
+        await inter.response.send_message(f"bot sits in another voice channel")
+        return False
+    return True
 
 
 @bot.slash_command(name="yam-play", description="Search in yandex music")
@@ -200,14 +219,16 @@ async def yam_play_command(
     _type: Literal["track", "album", "podcast episode", "podcast"],
     name: str,
 ):
-    if not await bot_is_available(inter):
+    if not await bot_is_available_to_connect(inter):
         return
-    elif bot.music_queue is None:
+
+    if len(bot.voice_clients) == 0:
         vc = await inter.user.voice.channel.connect(timeout=80)
-        bot.music_queue = MusicQueue(inter=inter, voice_client=vc)
         await inter.channel.send(f"bot connected to the channel")
     else:
         vc = bot.voice_clients[0]
+    bot.music_queue.inter = inter
+    bot.music_queue.voice_client = vc
 
     volume = await yami.YAM().find_by_type(name=name, _type=_type)
     if volume is None:
@@ -223,67 +244,74 @@ async def yam_play_command(
 
 @bot.slash_command(name="pause", description="Pause song")
 async def pause_command(inter: disnake.ApplicationCommandInteraction):
-    if await bot_is_available(inter):
-        await bot.music_queue.pause()
+    if not await music_commands_are_available(inter):
+        return
+    if await bot.music_queue.pause():
         await inter.response.send_message(f"music was paused")
     else:
-        await inter.response.send_message(f"bot doesn't sit in any voice channel")
+        await inter.response.send_message(f"music is already paused")
 
 
 @bot.slash_command(name="resume", description="Resume song")
 async def resume_command(inter: disnake.ApplicationCommandInteraction):
-    if await bot_is_available(inter):
-        await bot.music_queue.resume()
+    if not await music_commands_are_available(inter):
+        return
+    if await bot.music_queue.resume():
         await inter.response.send_message(f"music was resumed")
     else:
-        await inter.response.send_message(f"bot doesn't sit in any voice channel")
+        await inter.response.send_message(f"music is already playing")
 
 
 @bot.slash_command(name="skip", description="Skip current song")
-async def skip_command(inter: disnake.ApplicationCommandInteraction, to: int = 1):
-    if await bot_is_available(inter):
-        await bot.music_queue.skip(to=to)
-        await inter.response.send_message(
-            f"{inter.user.mention} skipped {to} song{'' if to % 10 == 1 else 's'}"
-        )
-    else:
-        await inter.response.send_message(f"bot doesn't sit in any voice channel")
+async def skip_command(
+    inter: disnake.ApplicationCommandInteraction,
+    to: int = 1,
+):
+    if not await music_commands_are_available(inter):
+        return
+    skipped_count = await bot.music_queue.skip(to=to)
+    await inter.response.defer()
+    await inter.followup.send(
+        f"{inter.user.mention} skipped {skipped_count} song{'' if to % 10 == 1 else 's'}"
+    )
 
 
 @bot.slash_command(name="repeat", description="Repeats queue of songs")
-async def resume_command(inter: disnake.ApplicationCommandInteraction):
-    if await bot_is_available(inter):
-        await bot.music_queue.repeat()
-        await inter.response.send_message(f"music was set on repeat")
-    else:
-        await inter.response.send_message(f"bot doesn't sit in any voice channel")
+async def repeat_command(inter: disnake.ApplicationCommandInteraction):
+    if not await music_commands_are_available(inter):
+        return
+    await bot.music_queue.repeat()
+    await inter.response.send_message(f"music was set on repeat")
 
 
 @bot.slash_command(name="stop", description="Stop playing music")
 async def stop_command(inter: disnake.ApplicationCommandInteraction):
     # check if user can use this command
-    if not await bot_is_available(inter=inter):
+    if not await music_commands_are_available(inter=inter):
         return
-    # check if bot already left all voice channels
-    if inter.guild.voice_client is None:
-        return await inter.response.send_message(
-            f"bot is already left all voice channels"
-        )
     # clean all folders
     await clean_music_folder()
     # stop music queue
     await bot.music_queue.stop()
-    bot.music_queue = None
     await inter.response.send_message(f"bot disconnected from a voice channel")
 
 
 @bot.slash_command(name="link", description="Returns link on current track")
 async def get_link(inter: disnake.ApplicationCommandInteraction):
-    if await bot_is_available(inter):
-        url = await bot.music_queue.get_url()
-        await inter.response.send_message(f"{url}")
-    else:
-        await inter.response.send_message(f"bot doesn't sit in any voice channel")
+    if not await music_commands_are_available(inter):
+        return
+    url = await bot.music_queue.get_url()
+    await inter.response.send_message(f"{url}")
+
+
+@bot.slash_command(name="show_queue", description="Returns queue")
+async def get_queue(inter: disnake.ApplicationCommandInteraction):
+    if not await music_commands_are_available(inter):
+        return
+    res = await bot.music_queue.get_list()
+    await inter.response.send_message(f"QUEUE")
+    for i in range(len(res)):
+        await inter.channel.send(f"{i + 1} - {res[i].title}")
 
 
 YDL_OPTIONS = {"format": "bestaudio", "noplaylist": "False"}
@@ -297,7 +325,7 @@ FFMPEG_OPTIONS = {
 async def youtube_play_command(
     inter: disnake.ApplicationCommandInteraction, queue: str
 ):
-    if await bot_is_available(inter) and inter.guild.voice_client is None:
+    if await bot_is_available_to_connect(inter) and inter.guild.voice_client is None:
         vc = await inter.user.voice.channel.connect(timeout=80)
         await inter.channel.send(f"bot connected to the channel")
     else:
@@ -310,6 +338,7 @@ async def youtube_play_command(
             info = ydl.extract_info(queue, download=False)
 
         url = info["formats"][0]["url"]
+        print(url)
         await inter.response.send_message(f"bot is playing [song]({url})")
         vc.play(
             disnake.FFmpegPCMAudio(
@@ -321,29 +350,6 @@ async def youtube_play_command(
             await asyncio.sleep(1)
         if not vc.is_paused():
             await vc.disconnect(force=True)
-
-
-@bot.slash_command(name="test_play", description="Testing")
-async def test_play_command(
-    inter: disnake.ApplicationCommandInteraction,
-    _type: Literal["track", "album", "podcast episode", "podcast"],
-    queue: str,
-):
-    if await bot_is_available(inter) and inter.guild.voice_client is None:
-        voice_client = await inter.user.voice.channel.connect(timeout=80)
-        bot.music_queue = MusicQueue(voice_client=voice_client)
-        await inter.channel.send(f"bot connected to the channel")
-
-    volume = await yami.YAM().find_by_type(name=queue, _type=_type)
-    if volume is None:
-        return await inter.response.send_message(f"couldn't find anything")
-
-    await inter.response.send_message(f"{volume.title} added to queue.")
-    await yami.YAM().download(volume=volume)
-    await bot.music_queue.add_volume(volume=volume)
-
-    if not bot.music_queue.is_playing():
-        await bot.music_queue.play()
 
 
 @bot.event

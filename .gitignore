@@ -17,8 +17,15 @@ share
 deprecated_code
 /music
 *.mp3
+images
+build
+dist
+bot_example.spec
 
-# future file
+# tests will appear in future
+test
+
+# future files
 modules/button
 modules/games/TicTacToe.py
 modules/music/vk_music_integration.py
