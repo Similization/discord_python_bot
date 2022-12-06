@@ -11,43 +11,12 @@ from webdriver_manager.chrome import ChromeDriverManager
 import yandex_music.exceptions
 from yandex_music import Client
 
-
-def get_artists_names(artists: list) -> str:
-    artists_names = []
-    for artist in artists:
-        artists_names.append(artist.name)
-    return ", ".join(artists_names)
-
-
-class TrackInfo:
-    def __init__(self, value: yandex_music.Track = None, catalog: str = "music/songs"):
-        self.track = value
-        self.artists = get_artists_names(self.track.artists)
-        self.title = f"{self.track.title} - {self.artists}"
-        self.catalog = catalog
-        self.extension = "mp3"
-        self.short_path = (
-            f"{self.catalog}/{self.track.title} - {self.artists}.{self.extension}"
-        )
-
-
-class AlbumInfo:
-    def __init__(
-        self,
-        value: yandex_music.Album = None,
-        tracks: list[TrackInfo] = None,
-        catalog: str = "music/albums",
-    ):
-        self.album = value
-        self.artists = get_artists_names(self.album.artists)
-        self.title = f"{self.album.title} - {self.artists}"
-        self.catalog = catalog
-        self.short_path = f"{self.catalog}/{self.album.title} - {self.artists}"
-        self.tracks = list() if tracks is None else tracks
+from modules.music.yandex_album import YandexAlbum
+from modules.music.yandex_track import YandexTrack
 
 
 class YAM:
-    track_list: list[TrackInfo | AlbumInfo] = []
+    track_list: list[YandexTrack | YandexAlbum] = []
     project_path = ""
 
     def __init__(self):
@@ -117,71 +86,64 @@ class YAM:
 
         return token
 
-    @staticmethod
-    def __private_get_artists_names(artists) -> str:
-        artists_names = []
-        for artist in artists:
-            artists_names.append(artist.name)
-        return ", ".join(artists_names)
-
-    async def download_track(self, track_info: TrackInfo):
+    async def download_track(self, track_info: YandexTrack):
         full_path_to_track = f"{self.project_path}/{track_info.catalog}"
         if not os.path.exists(full_path_to_track):
             os.makedirs(full_path_to_track)
 
         # upload track
-        track_info.track.download(track_info.short_path)
+        track_info.volume.download(track_info.short_path)
         # add track to track list
         self.track_list.append(track_info)
 
-    async def download_album(self, album_info: AlbumInfo):
+    async def download_album(self, album_info: YandexAlbum):
         full_path_to_album = f"{self.project_path}/{album_info.short_path}"
         if not os.path.exists(full_path_to_album):
             os.makedirs(full_path_to_album)
 
-        for volume in album_info.album.volumes:
+        for volume in album_info.volume.volumes:
             for track in volume:
-                track_cls = TrackInfo(track, catalog=album_info.short_path)
-                track_cls.track.download(track_cls.short_path)
+                track_cls = YandexTrack(track, catalog=album_info.short_path)
+                track_cls.volume.download(track_cls.short_path)
                 album_info.tracks.append(track_cls)
 
         self.track_list.append(album_info)
 
     async def find_by_type(
         self, name: str, _type: Literal["track", "album", "podcast episode", "podcast"]
-    ) -> Optional[TrackInfo | AlbumInfo]:
+    ) -> Optional[YandexTrack | YandexAlbum]:
         match _type:
             case "track":
                 founded_tracks = self.client.search(name, type_="track").tracks
                 if founded_tracks is not None:
-                    return TrackInfo(value=founded_tracks.results[0])
+                    return YandexTrack(track=founded_tracks.results[0])
             case "podcast episode":
                 founded_podcast_episodes = self.client.search(
                     name, type_="podcast_episode"
                 ).podcast_episodes
                 if founded_podcast_episodes is not None:
-                    return TrackInfo(
-                        value=founded_podcast_episodes.results[0],
+                    return YandexTrack(
+                        track=founded_podcast_episodes.results[0],
                         catalog="music/podcast_episodes",
                     )
             case "album":
                 founded_albums = self.client.search(name).albums
                 if founded_albums is not None:
-                    return AlbumInfo(
-                        value=founded_albums.results[0].with_tracks(),
+                    return YandexAlbum(
+                        album=founded_albums.results[0].with_tracks(),
                     )
             case "podcast":
                 founded_podcasts = self.client.search(name, type_="podcast").podcasts
                 if founded_podcasts is not None:
-                    return AlbumInfo(
-                        value=founded_podcasts.results[0],
+                    return YandexAlbum(
+                        album=founded_podcasts.results[0],
                         catalog="music/podcasts",
                     )
 
-    async def download(self, volume: TrackInfo | AlbumInfo):
+    async def download(self, volume: YandexTrack | YandexAlbum):
         if volume in self.track_list:
             return
-        if isinstance(volume, TrackInfo):
+        if isinstance(volume, YandexTrack):
             await self.download_track(volume)
-        elif isinstance(volume, AlbumInfo):
+        elif isinstance(volume, YandexAlbum):
             await self.download_album(volume)

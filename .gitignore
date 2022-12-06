@@ -27,6 +27,6 @@ test
 
 # future files
 modules/button
-modules/games/TicTacToe.py
+modules/games/tic_tac_toe.py
 modules/music/vk_music_integration.py
-modules/music/youtube_music_integration.py
+modules/music/youtube_track.py

@@ -5,7 +5,7 @@ import disnake
 from disnake.ext import commands
 from disnake.ext.commands import Bot
 
-from modules.music.MusicQueue import MusicQueue
+from modules.music.music_queue import MusicQueue
 
 
 def load_opus():
@@ -26,7 +26,7 @@ class StarBot(Bot):
         config: dict,
         intents: disnake.Intents = None,
         music_queue: Optional[MusicQueue] = None,
-    ):
+    ) -> None:
         load_opus()
 
         if intents is None:
@@ -41,5 +41,5 @@ class StarBot(Bot):
         self.config = config
         self.music_queue: Optional[MusicQueue] = music_queue
 
-    def run(self):
+    def run(self) -> None:
         super().run(self.config["token"])
