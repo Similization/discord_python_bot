@@ -29,4 +29,3 @@ test
 modules/button
 modules/games/tic_tac_toe.py
 modules/music/vk_music_integration.py
-modules/music/youtube_track.py

@@ -6,6 +6,7 @@ from disnake.ext import commands
 from disnake.ext.commands import Bot
 
 from modules.music.music_queue import MusicQueue
+from modules.music.yandex_radio import YandexRadio
 
 
 def load_opus():
@@ -26,6 +27,7 @@ class StarBot(Bot):
         config: dict,
         intents: disnake.Intents = None,
         music_queue: Optional[MusicQueue] = None,
+        yandex_radio: Optional[YandexRadio] = None,
     ) -> None:
         load_opus()
 
@@ -40,6 +42,8 @@ class StarBot(Bot):
 
         self.config = config
         self.music_queue: Optional[MusicQueue] = music_queue
+        self.yandex_radio: Optional[YandexRadio] = yandex_radio
+        self.is_playing: bool = False
 
     def run(self) -> None:
         super().run(self.config["token"])

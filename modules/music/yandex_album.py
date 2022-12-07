@@ -15,7 +15,7 @@ class YandexAlbum(VolumeInfo):
         super().__init__(
             volume=album,
             artists=album.artists,
-            title=f"{self.volume.title} - {self.artists}",
+            title=album.title,
             catalog=catalog,
             url=url,
         )

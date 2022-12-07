@@ -26,7 +26,7 @@ class YandexRadio:
         voice_client: Optional[disnake.VoiceClient] = None,
     ) -> None:
         self.client: yandex_music.Client = client
-        self.voice_channel = text_channel
+        self.text_channel = text_channel
         self.inter = inter
         self.current_station: Optional[YandexStation] = station
         self.music_queue = MusicQueue(inter=inter, voice_client=voice_client)
@@ -34,7 +34,7 @@ class YandexRadio:
         self.station_names = [radio.station.name for radio in self.available_stations]
         self.radio_started: bool = False
 
-    def set_station(self, station_name: str):
+    async def set_station(self, station_name: str):
         result = None
         for station_result in self.available_stations:
             if station_result.station.name != station_name:
@@ -47,14 +47,14 @@ class YandexRadio:
 
         self.current_station = YandexStation(client=self.client, station_result=result)
 
-    def set_random_station(self):
+    async def set_random_station(self):
         available_stations = self.client.rotor_stations_list()
         random_station = random.choice(available_stations)
         self.current_station = YandexStation(
             client=self.client, station_result=random_station
         )
 
-    def change_station_setting(
+    async def change_station_setting(
         self,
         mood_energy: Literal["fun", "active", "calm", "sad", "all"] = "all",
         diversity: Literal["favorite", "popular", "discover", "default"] = "default",
@@ -72,7 +72,7 @@ class YandexRadio:
             timeout=timeout,
         )
 
-    def get_current_station_info(self):
+    async def get_current_station_info(self):
         if self.current_station is None:
             raise YandexRadioError("current station is None")
         return self.current_station.get_info()
@@ -84,23 +84,26 @@ class YandexRadio:
             self.music_queue.inter = None
         return self.music_queue.inter is not None
 
-    def start_radio(self):
+    async def start_radio(self):
         if not self.radio_started:
             self.current_station.start_radio()
-            self.__update_songs()
-            self.music_queue.play()
+            await self.__update_songs()
+            await self.music_queue.play()
 
             while True:
-                if len(self.music_queue.track_list) > 2:
+                if len(self.music_queue.volume_list) > 2:
                     continue
-                self.__update_songs()
+                await self.__update_songs()
         else:
             raise YandexRadioError("radio is already started!")
 
-    def __update_songs(self):
+    async def exit(self):
+        await self.music_queue.stop()
+
+    async def __update_songs(self):
         track = self.current_station.get_current_track()
         volume = YandexTrack(track=track, catalog="radio")
-        self.music_queue.add_volume(volume=volume)
+        await self.music_queue.add_volume(volume=volume)
         self.current_station.play_next()
 
 

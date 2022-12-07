@@ -51,7 +51,7 @@ class MusicQueue(AbstractMusicQueue):
                 else:
                     break
             await self.next()
-        # await self.stop()
+        await self.stop()
 
     async def __play_volume(self, volume: YandexTrack | YandexAlbum | YouTubeTrack):
         if isinstance(volume, YandexAlbum):
@@ -78,10 +78,14 @@ class MusicQueue(AbstractMusicQueue):
     async def add_volume(self, volume: YandexTrack | YandexAlbum | YouTubeTrack):
         self.volume_list.append(volume)
 
-    async def add_volumes(self, volumes: list[YandexTrack | YandexAlbum | YouTubeTrack]):
+    async def add_volumes(
+        self, volumes: list[YandexTrack | YandexAlbum | YouTubeTrack]
+    ):
         self.volume_list.extend(volumes)
 
     async def is_playing(self) -> bool:
+        if self.voice_client is None:
+            raise MusicQueueError("Voice client is None")
         return self.voice_client.is_playing()
 
     async def pause(self) -> bool:
@@ -99,7 +103,9 @@ class MusicQueue(AbstractMusicQueue):
             current_track = self.current_volume.tracks[self.track_position]
             self.current_volume.tracks.remove(current_track)
         elif len(self.current_volume.tracks) != 0:
-            self.track_position = (self.track_position + 1) % len(self.current_volume.tracks)
+            self.track_position = (self.track_position + 1) % len(
+                self.current_volume.tracks
+            )
         else:
             self.track_position = 0
             await self.next_volume()
@@ -113,17 +119,20 @@ class MusicQueue(AbstractMusicQueue):
             self.volume_position = (self.volume_position + 1) % len(self.volume_list)
 
     async def next(self):
-        if self.voice_client.is_playing():
-            self.voice_client.stop()
-
-        if isinstance(self.current_volume, YouTubeTrack | YandexTrack) or self.skip_full:
+        if (
+            isinstance(self.current_volume, YouTubeTrack | YandexTrack)
+            or self.skip_full
+        ):
             await self.next_volume()
         else:
             await self.next_volume()
 
     async def skip(self, to: int = 1, skip_full: bool = False) -> int:
-        skipped_count: int = 1
         self.skip_full = skip_full
+        skipped_count: int = 0
+        if self.voice_client.is_playing():
+            self.voice_client.stop()
+            skipped_count += 1
         while skipped_count < to and len(self.volume_list) != 0:
             await self.next()
             skipped_count += 1
@@ -137,10 +146,7 @@ class MusicQueue(AbstractMusicQueue):
         await self.voice_client.disconnect(force=True)
         self.voice_client = None
 
-    async def repeat(
-            self,
-            delete_track_on_skip: bool = False
-    ) -> str:
+    async def repeat(self, delete_track_on_skip: bool = False) -> str:
         if not self.is_repeatable:
             self.is_repeatable = True
             result = "Music was set on repeat. "
@@ -148,7 +154,9 @@ class MusicQueue(AbstractMusicQueue):
             result = "Music was on repeat already. "
         if self.delete != delete_track_on_skip:
             self.delete = delete_track_on_skip
-            result += f"Option delete on skip was {'' if delete_track_on_skip else 'un'}set"
+            result += (
+                f"Option delete on skip was {'' if delete_track_on_skip else 'un'}set"
+            )
         if result != "":
             return result
         return "Nothing changed"

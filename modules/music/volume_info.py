@@ -12,8 +12,12 @@ class VolumeInfo:
         url: str = "",
     ):
         self.volume = volume
-        self.artists = self.get_artists_names(artists=artists)
-        self.title = title
+        if len(artists) != 0:
+            self.artists = self.get_artists_names(artists=artists)
+            self.title = f"{title} - {self.artists}"
+        else:
+            self.artists = []
+            self.title = f"{title}"
         self.catalog = catalog
         self.extension = extension
         self.short_path = f"{self.catalog}/{self.title}.{self.extension}"

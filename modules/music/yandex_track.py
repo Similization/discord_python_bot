@@ -9,7 +9,7 @@ class YandexTrack(VolumeInfo):
         super().__init__(
             volume=track,
             artists=track.artists,
-            title=f"{self.volume.title} - {self.artists}",
+            title=track.title,
             catalog=catalog,
             url=url,
         )

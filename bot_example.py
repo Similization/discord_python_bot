@@ -14,6 +14,7 @@ from modules.music import yandex_music_integration as yami
 from modules.music.music_queue import MusicQueue
 from modules.music.yandex_radio import YandexRadio
 from modules.music.yandex_track import YandexTrack
+from modules.music.youtube_integration import YTM
 from modules.music.youtube_track import YouTubeTrack
 from modules.star_bot import StarBot
 
@@ -25,6 +26,7 @@ with open("util/configuration.json") as json_data_file:
 bot_data = data["bot"]
 bot = StarBot(config=bot_data)
 bot.music_queue = MusicQueue(inter=None, voice_client=None)
+YTM.config = data["youtube"]
 
 
 @bot.slash_command(name="ping", description="Pings the bot")
@@ -34,7 +36,7 @@ async def ping_command(inter: disnake.ApplicationCommandInteraction):
 
 @bot.slash_command(name="roll", description="Rolls the dice")
 async def roll_command(
-        inter: disnake.ApplicationCommandInteraction, _from: int = 1, _to: int = 6
+    inter: disnake.ApplicationCommandInteraction, _from: int = 1, _to: int = 6
 ):
     if _from > _to:
         _from, _to = _to, _from
@@ -47,8 +49,8 @@ async def roll_command(
     name="rock-paper-scissors", description="Plays with you in rock paper scissors game"
 )
 async def play_rock_paper_scissors_command(
-        inter: disnake.ApplicationCommandInteraction,
-        move: Literal["rock", "paper", "scissors"],
+    inter: disnake.ApplicationCommandInteraction,
+    move: Literal["rock", "paper", "scissors"],
 ):
     bot_move, result = await games.play_rock_paper_scissors(move=move)
     await inter.response.send_message(
@@ -59,12 +61,20 @@ async def play_rock_paper_scissors_command(
 @bot.slash_command(
     name="bulls-and-cows", description="Plays with you in bulls and cows game"
 )
-async def play_bulls_and_cows_command(inter: disnake.ApplicationCommandInteraction):
+async def play_bulls_and_cows_command(
+    inter: disnake.ApplicationCommandInteraction, move_timeout: int = 20
+):
+    if bot.is_playing:
+        await inter.response.send_message(
+            f"You have to finish previous game or wait until"
+        )
+        return
+
     def is_guess_correct(_message: disnake.Message):
         return (
-                _message.author == inter.author
-                and _message.content.isdigit()
-                and len(set(_message.content)) == 4
+            _message.author == inter.author
+            and _message.content.isdigit()
+            and len(set(_message.content)) == 4
         )
 
     await inter.response.send_message(
@@ -83,13 +93,13 @@ async def play_bulls_and_cows_command(inter: disnake.ApplicationCommandInteracti
     while True:
         try:
             guess_message = await inter.bot.wait_for(
-                "message", check=is_guess_correct, timeout=20
+                "message", check=is_guess_correct, timeout=move_timeout
             )
             guess = guess_message.content
             moves_count += 1
 
             if moves_count == 1:
-                await inter.followup.send("Previous results:")
+                await inter.channel.send("Previous results:")
                 message = inter.channel.last_message
 
             bulls_count, cows_count = await game.compare_guess_and_answer(guess)
@@ -108,13 +118,14 @@ async def play_bulls_and_cows_command(inter: disnake.ApplicationCommandInteracti
             if guess == answer:
                 break
         except asyncio.TimeoutError:
-            return await inter.followup.send(
+            return await inter.channel.send(
                 f"Sorry, you took too long. The answer was {answer}."
             )
-    await inter.followup.send(
+    await inter.channel.send(
         f"You win, the number is: {answer}, "
         f"it took you {moves_count} move{'' if moves_count % 10 == 1 else 's'}"
     )
+    bot.is_playing = False
 
 
 # @bot.slash_command(name="tic-tac-toe", description="Plays with you in tic-tac-toe game")
@@ -135,7 +146,7 @@ async def play_bulls_and_cows_command(inter: disnake.ApplicationCommandInteracti
     name="guess-number", description="Plays with you in guess number game"
 )
 async def play_guess_number_command(
-        inter: disnake.ApplicationCommandInteraction, _from: int = 1, _to: int = 10
+    inter: disnake.ApplicationCommandInteraction, _from: int = 1, _to: int = 10
 ):
     await inter.response.send_message(f"Guess a number between {_from} and {_to}.")
 
@@ -147,7 +158,9 @@ async def play_guess_number_command(
     answer = random.randint(_from, _to)
 
     try:
-        guess = await inter.bot.wait_for(event="message", check=is_guess_message, timeout=10)
+        guess = await inter.bot.wait_for(
+            event="message", check=is_guess_message, timeout=10
+        )
     except asyncio.TimeoutError:
         return await inter.channel.send(
             f"Sorry, you took too long. The answer was {answer}."
@@ -163,9 +176,9 @@ async def play_guess_number_command(
     name="balaboba", description="Uses balaboba to generate you a random text"
 )
 async def generate_text_command(
-        inter: disnake.ApplicationCommandInteraction,
-        text: str,
-        language: Literal["en", "ru"] = "ru",
+    inter: disnake.ApplicationCommandInteraction,
+    text: str,
+    language: Literal["en", "ru"] = "ru",
 ):
     await inter.response.defer()
     response = await bi.generate_text(text, language)
@@ -190,37 +203,38 @@ async def bot_is_in_channel() -> bool:
 
 
 async def bot_is_available_to_connect(
-        inter: disnake.ApplicationCommandInteraction,
+    inter: disnake.ApplicationCommandInteraction,
 ) -> bool:
     if not await user_in_voice_channel(inter):
-        await inter.response.send_message(f"you should be in a voice channel")
+        await inter.followup.send(f"you should be in a voice channel")
         return False
     if await bot_is_in_channel() and not await bot_is_in_same_channel(inter):
-        await inter.response.send_message(f"bot sits in another voice channel")
+        await inter.followup.send(f"bot sits in another voice channel")
         return False
     return True
 
 
 async def music_commands_are_available(
-        inter: disnake.ApplicationCommandInteraction,
+    inter: disnake.ApplicationCommandInteraction,
 ) -> bool:
+    response: disnake.InteractionResponse = inter.response()
     if not await bot_is_in_channel():
-        await inter.response.send_message(f"bot doesn't sit in any channel")
+        await response.send_message(f"bot doesn't sit in any channel")
         return False
     if not await user_in_voice_channel(inter):
-        await inter.response.send_message(f"you should be in a voice channel")
+        await response.send_message(f"you should be in a voice channel")
         return False
     if not await bot_is_in_same_channel(inter):
-        await inter.response.send_message(f"bot sits in another voice channel")
+        await response.send_message(f"bot sits in another voice channel")
         return False
     return True
 
 
 async def play_music_command(
-        inter: disnake.ApplicationCommandInteraction,
-        service: Literal['Yandex', 'YouTube'],
-        song_name: str,
-        _type: Optional[Literal["track", "album", "podcast episode", "podcast"]] = None
+    inter: disnake.ApplicationCommandInteraction,
+    service: Literal["Yandex", "YouTube"],
+    song_name: str,
+    _type: Optional[Literal["track", "album", "podcast episode", "podcast"]] = None,
 ):
     if not await bot_is_available_to_connect(inter):
         return
@@ -233,36 +247,41 @@ async def play_music_command(
     bot.music_queue.inter = inter
     bot.music_queue.voice_client = vc
 
-    if service == 'Yandex':
+    if service == "Yandex":
         volume = await yami.YAM().find_by_type(name=song_name, _type=_type)
         if volume is None:
             return await inter.response.send_message(f"bot couldn't find anything")
 
-        await inter.response.send_message(f"{volume.title} added to queue.")
+        await inter.followup.send(f"{volume.title} added to queue.")
         await yami.YAM().download(volume=volume)
     else:
-        volume = YouTubeTrack(config=bot_data["youtube"], queue=song_name)
+        volume = YTM.get_track(queue=song_name, config=YTM.config)
+        if volume is None:
+            return await inter.response.send_message(
+                f"Check link, bot couldn't find anything"
+            )
+
+        await inter.response.send_message(f"{volume.title} added to queue.")
     await bot.music_queue.add_volume(volume=volume)
 
-    if not bot.music_queue.is_playing():
+    if not await bot.music_queue.is_playing():
         await bot.music_queue.play()
 
 
 @bot.slash_command(name="yam-play", description="Search in yandex music")
 async def yam_play_command(
-        inter: disnake.ApplicationCommandInteraction,
-        _type: Literal["track", "album", "podcast episode", "podcast"],
-        name: str,
+    inter: disnake.ApplicationCommandInteraction,
+    _type: Literal["track", "album", "podcast episode", "podcast"],
+    name: str,
 ):
-    await play_music_command(inter=inter, service='Yandex', song_name=name, _type=_type)
+    await play_music_command(inter=inter, service="Yandex", song_name=name, _type=_type)
 
 
 @bot.slash_command(name="youtube-play", description="Search in yandex music")
 async def youtube_play_command(
-        inter: disnake.ApplicationCommandInteraction,
-        queue: str
+    inter: disnake.ApplicationCommandInteraction, queue: str
 ):
-    await play_music_command(inter=inter, service='YouTube', song_name=queue)
+    await play_music_command(inter=inter, service="YouTube", song_name=queue)
 
 
 @bot.slash_command(name="pause", description="Pause song")
@@ -287,13 +306,13 @@ async def resume_command(inter: disnake.ApplicationCommandInteraction):
 
 @bot.slash_command(name="skip", description="Skip current song")
 async def skip_command(
-        inter: disnake.ApplicationCommandInteraction,
-        to: int = 1,
+    inter: disnake.ApplicationCommandInteraction,
+    to: int = 1,
 ):
+    await inter.response.defer()
     if not await music_commands_are_available(inter):
         return
     skipped_count = await bot.music_queue.skip(to=to)
-    await inter.response.defer()
     await inter.followup.send(
         f"{inter.user.mention} skipped {skipped_count} song{'' if to % 10 == 1 else 's'}"
     )
@@ -301,8 +320,8 @@ async def skip_command(
 
 @bot.slash_command(name="repeat", description="Repeats queue of songs")
 async def repeat_command(
-        inter: disnake.ApplicationCommandInteraction,
-        todo: Literal["set on repeat", "remove from repeat"] = "set on repeat",
+    inter: disnake.ApplicationCommandInteraction,
+    todo: Literal["set on repeat", "remove from repeat"] = "set on repeat",
 ):
     if not await music_commands_are_available(inter):
         return
@@ -314,6 +333,7 @@ async def repeat_command(
 
 @bot.slash_command(name="stop", description="Stop playing music")
 async def stop_command(inter: disnake.ApplicationCommandInteraction):
+    await inter.response.defer()
     # check if user can use this command
     if not await music_commands_are_available(inter=inter):
         return
@@ -321,7 +341,7 @@ async def stop_command(inter: disnake.ApplicationCommandInteraction):
     await clean_music_folder()
     # stop music queue
     await bot.music_queue.stop()
-    await inter.response.send_message(f"bot disconnected from a voice channel")
+    await inter.followup.send(f"bot disconnected from a voice channel")
 
 
 @bot.slash_command(name="link", description="Returns link on current volume")
@@ -334,29 +354,28 @@ async def get_link(inter: disnake.ApplicationCommandInteraction):
 
 @bot.slash_command(name="show_queue", description="Returns queue")
 async def get_queue(
-        inter: disnake.ApplicationCommandInteraction,
-        with_links: bool = False
+    inter: disnake.ApplicationCommandInteraction, with_links: bool = False
 ):
     if not await music_commands_are_available(inter):
         return
     volume_list = await bot.music_queue.get_list()
 
     volume_info = dict()
-    volume_info['Type'] = []
-    volume_info['Title'] = []
+    volume_info["Type"] = []
+    volume_info["Title"] = []
     if with_links:
-        volume_info['Link'] = []
+        volume_info["Link"] = []
 
     for volume in volume_list:
         if isinstance(volume, YandexTrack):
-            volume_info['Type'].append('Yandex track')
+            volume_info["Type"].append("Yandex track")
         elif isinstance(volume, YouTubeTrack):
-            volume_info['Type'].append('Youtube track')
+            volume_info["Type"].append("Youtube track")
         else:
-            volume_info['Type'].append('Yandex album')
-        volume_info['Title'].append(volume.title)
+            volume_info["Type"].append("Yandex album")
+        volume_info["Title"].append(volume.title)
         if with_links:
-            volume_info['Link'].append(volume.get_url())
+            volume_info["Link"].append(volume.get_url())
 
     embed = disnake.Embed(title=f"__**Music queue:**__", color=0xFFAE00)
     for key, value in volume_info.items():
@@ -368,22 +387,22 @@ async def get_queue(
 
 @bot.slash_command(name="be_radio", description="Bot start act like a radio")
 async def radio_command(
-        inter: disnake.ApplicationCommandInteraction,
-        station_name: Optional[str] = None,
+    inter: disnake.ApplicationCommandInteraction,
+    station_name: Optional[str] = None,
 ):
-    if not bot_is_available_to_connect(inter=inter):
+    if not await bot_is_available_to_connect(inter=inter) or await bot_is_in_channel():
         return
     vc = await inter.user.voice.channel.connect()
     await inter.channel.send(f"bot connected to the channel")
 
-    yandex_radio = YandexRadio(text_channel=None, inter=inter, voice_client=vc)
+    bot.yandex_radio = YandexRadio(text_channel=None, inter=inter, voice_client=vc)
 
     if station_name is None:
-        yandex_radio.set_random_station()
+        await bot.yandex_radio.set_random_station()
     else:
-        yandex_radio.set_station(station_name=station_name)
+        await bot.yandex_radio.set_station(station_name=station_name)
 
-    yandex_radio.start_radio()
+    await bot.yandex_radio.start_radio()
 
 
 @bot.event
